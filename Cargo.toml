@@ -1,0 +1,9 @@
+[package]
+name = "sigmaos_craft_font"
+version = "0.1.0"
+edition = "2021"
+description = "Font management integration for SigmaOS — font catalog, loading, rendering hints, and variable font support"
+
+[lib]
+name = "sigmaos_craft_font"
+path = "src/lib.rs"

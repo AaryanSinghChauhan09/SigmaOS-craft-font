@@ -1,0 +1,16 @@
+[component]
+name = "SigmaOS-craft-font"
+tier = 5
+stability = "scaffold"
+language = "rust"
+description = "Font management integration for SigmaOS — font catalog, loading, rendering hints, and variable font support"
+upstream = []
+
+[contract]
+provides = ["font-catalog", "variable-fonts"]
+depends_on = []
+
+[maturity]
+status = "Scaffold"
+test_evidence = "Compiles"
+next_milestone = "Verification test suite"

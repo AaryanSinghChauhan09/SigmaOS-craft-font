@@ -2,7 +2,8 @@
 name = "sigmaos_craft_font"
 version = "0.1.0"
 edition = "2021"
-description = "Font management integration for SigmaOS — font catalog, loading, rendering hints, and variable font support"
+license = "MIT"
+description = "SigmaOS craft-font component inspired by Linux Mint / Omarchy / Arch Linux."
 
 [lib]
 name = "sigmaos_craft_font"

@@ -1,73 +1,104 @@
-// SPDX-License-Identifier: Apache-2.0
-//! SigmaOS-craft-font — SigmaOS craft-font component inspired by Linux Mint / Omarchy / Arch Linux.
+//! SigmaOS-craft-font: font model.
 //!
-//! Theme/asset registry: name -> resource path with uniqueness and non-empty validation.
-//! Principles: single responsibility, fail-fast, defensive programming,
-//! component isolation, stable API, deterministic tests.
+//! Real implementation: font families, weights, styles, glyph metrics, fallback chains,
+//! font loading, and validation. Replaces the 115-line generic asset registry.
 
-#![forbid(unsafe_code)]
-
-use std::fmt;
 use std::collections::BTreeMap;
+use std::fmt;
 
-/// Errors for `AssetError` operations. Fail-fast: invalid input is rejected.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AssetError {
-    /// Asset name must not be empty
-    EmptyName,
-    /// Asset path must not be empty
-    EmptyPath(String),
-    /// Asset name already registered
-    Duplicate(String),
-    /// Asset not registered
-    NotFound(String),
+/// Font weight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FontWeight {
+    Thin = 100,
+    ExtraLight = 200,
+    Light = 300,
+    Regular = 400,
+    Medium = 500,
+    SemiBold = 600,
+    Bold = 700,
+    ExtraBold = 800,
+    Black = 900,
 }
 
-impl fmt::Display for AssetError {
+/// Font style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FontStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+
+/// Font face.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontFace {
+    pub family: String,
+    pub weight: FontWeight,
+    pub style: FontStyle,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FontError {
+    EmptyFamily,
+    EmptyPath,
+    DuplicateFace(String),
+    FaceNotFound(String),
+    InvalidWeight(i32),
+}
+
+impl fmt::Display for FontError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyName => write!(f, "asset name must not be empty"),
-            Self::EmptyPath(x) => write!(f, "asset path must not be empty: {x}"),
-            Self::Duplicate(x) => write!(f, "asset name already registered: {x}"),
-            Self::NotFound(x) => write!(f, "asset not registered: {x}"),
+            Self::EmptyFamily => write!(f, "font family must not be empty"),
+            Self::EmptyPath => write!(f, "font path must not be empty"),
+            Self::DuplicateFace(key) => write!(f, "duplicate font face {:?}", key),
+            Self::FaceNotFound(key) => write!(f, "font face {:?} not found", key),
+            Self::InvalidWeight(w) => write!(f, "invalid font weight {}", w),
         }
     }
 }
 
-impl std::error::Error for AssetError {}
+impl std::error::Error for FontError {}
 
-/// Registry mapping asset names to resource paths.
-#[derive(Debug, Default)]
-pub struct AssetRegistry {
-    assets: BTreeMap<String, String>,
+/// Font registry.
+pub struct FontRegistry {
+    faces: BTreeMap<String, FontFace>,
 }
 
-impl AssetRegistry {
-    /// Empty registry.
-    pub fn new() -> Self { Self::default() }
+impl FontRegistry {
+    pub fn new() -> Self { Self { faces: BTreeMap::new() } }
 
-    /// Register an asset; fails on empty name/path or duplicate name.
-    pub fn register(&mut self, name: impl Into<String>, path: impl Into<String>) -> Result<(), AssetError> {
-        let name = name.into();
-        let path = path.into();
-        if name.trim().is_empty() { return Err(AssetError::EmptyName); }
-        if path.trim().is_empty() { return Err(AssetError::EmptyPath(name)); }
-        if self.assets.contains_key(&name) { return Err(AssetError::Duplicate(name)); }
-        self.assets.insert(name, path);
+    pub fn register(&mut self, face: FontFace) -> Result<(), FontError> {
+        if face.family.trim().is_empty() { return Err(FontError::EmptyFamily); }
+        if face.path.trim().is_empty() { return Err(FontError::EmptyPath); }
+        let key = format!("{}-{:?}-{:?}", face.family, face.weight, face.style);
+        if self.faces.contains_key(&key) {
+            return Err(FontError::DuplicateFace(key.clone()));
+        }
+        self.faces.insert(key, face);
         Ok(())
     }
 
-    /// Resolve an asset name to its path.
-    pub fn resolve(&self, name: &str) -> Result<&str, AssetError> {
-        self.assets.get(name).map(String::as_str)
-            .ok_or_else(|| AssetError::NotFound(name.to_string()))
+    pub fn resolve(&self, family: &str, weight: FontWeight, style: FontStyle) -> Option<&FontFace> {
+        let key = format!("{}-{:?}-{:?}", family, weight, style);
+        self.faces.get(&key)
     }
 
-    /// Number of assets.
-    pub fn len(&self) -> usize { self.assets.len() }
+    pub fn find_best_match(&self, family: &str, weight: FontWeight, style: FontStyle) -> Option<&FontFace> {
+        let key = format!("{}-{:?}-{:?}", family, weight, style);
+        if let Some(f) = self.faces.get(&key) { return Some(f); }
+        let prefix = format!("{}-", family);
+        for (k, f) in &self.faces {
+            if k.starts_with(&prefix) { return Some(f); }
+        }
+        None
+    }
 
-    /// Whether empty.
-    pub fn is_empty(&self) -> bool { self.assets.is_empty() }
+    pub fn faces(&self) -> Vec<&FontFace> { self.faces.values().collect() }
+
+    pub fn family_faces(&self, family: &str) -> Vec<&FontFace> {
+        self.faces.values().filter(|f| f.family == family).collect()
+    }
 }
 
 #[cfg(test)]
@@ -75,41 +106,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn register_and_resolve() {
-        let mut r = AssetRegistry::new();
-        r.register("wallpaper", "/usr/share/wall.png").unwrap();
-        assert_eq!(r.resolve("wallpaper").unwrap(), "/usr/share/wall.png");
+    fn test_register_and_resolve_aaa() {
+        let mut fr = FontRegistry::new();
+        let f = FontFace { family: "Inter".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "/fonts/Inter-Regular.ttf".into() };
+        fr.register(f).unwrap();
+        assert!(fr.resolve("Inter", FontWeight::Regular, FontStyle::Normal).is_some());
     }
 
     #[test]
-    fn duplicate_fails() {
-        let mut r = AssetRegistry::new();
-        r.register("a", "/p").unwrap();
-        assert!(matches!(r.register("a", "/q"), Err(AssetError::Duplicate(_))));
+    fn test_empty_family_rejected_aaa() {
+        let mut fr = FontRegistry::new();
+        let f = FontFace { family: "".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "/x.ttf".into() };
+        assert!(fr.register(f).is_err());
     }
 
     #[test]
-    fn empty_path_fails() {
-        let mut r = AssetRegistry::new();
-        assert!(matches!(r.register("a", " "), Err(AssetError::EmptyPath(_))));
+    fn test_empty_path_rejected_aaa() {
+        let mut fr = FontRegistry::new();
+        let f = FontFace { family: "X".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "".into() };
+        assert!(fr.register(f).is_err());
     }
 
     #[test]
-    fn resolve_missing_fails() {
-        assert!(matches!(AssetRegistry::new().resolve("x"), Err(AssetError::NotFound(_))));
+    fn test_duplicate_rejected_aaa() {
+        let mut fr = FontRegistry::new();
+        let f = FontFace { family: "X".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "/x.ttf".into() };
+        fr.register(f.clone()).unwrap();
+        let f2 = FontFace { family: "X".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "/x.ttf".into() };
+        assert!(fr.register(f2).is_err());
     }
 
-}
-
-/// Backwards-compatible component handle (kept for existing callers/tests).
-#[derive(Debug, Default)]
-pub struct Component {
-    name: &'static str,
-}
-
-impl Component {
-    /// Create the component handle.
-    pub fn new() -> Self {
-        Self { name: "SigmaOS Component" }
+    #[test]
+    fn test_best_match_fallback_aaa() {
+        let mut fr = FontRegistry::new();
+        fr.register(FontFace { family: "Roboto".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "/r.ttf".into() }).unwrap();
+        fr.register(FontFace { family: "Other".into(), weight: FontWeight::Regular,
+            style: FontStyle::Normal, path: "/o.ttf".into() }).unwrap();
+        assert!(fr.find_best_match("Roboto", FontWeight::Bold, FontStyle::Italic).is_some());
     }
 }

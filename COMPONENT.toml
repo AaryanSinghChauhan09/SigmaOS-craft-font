@@ -3,7 +3,7 @@ name = "SigmaOS-craft-font"
 tier = 5
 stability = "scaffold"
 language = "rust"
-description = "Font management integration for SigmaOS — font catalog, loading, rendering hints, and variable font support"
+description = "No GitHub description is set; component scope remains unclassified."
 upstream = []
 
 [contract]

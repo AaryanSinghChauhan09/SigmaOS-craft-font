@@ -8,6 +8,9 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::all)]
 
+/// Font management module.
+pub mod sigmafont;
+
 /// Font weight values following CSS/OpenType specifications.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FontWeight {
